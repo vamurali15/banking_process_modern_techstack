@@ -3,7 +3,7 @@ import boto3
 import snowflake.connector
 from airflow import DAG
 from airflow.operators.python import PythonOperator
-from datetime import datetime, timedelta
+from datetime import datetime,timedelta
 from dotenv import load_dotenv
 
 # Load environment variables
