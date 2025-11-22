@@ -49,7 +49,7 @@ jobs:
         run: |
           mkdir -p ~/.dbt
           cat > ~/.dbt/profiles.yml <<EOL
-          banking_dbt:
+          dbt_for_banking:
             target: dev
             outputs:
               dev:
@@ -64,6 +64,6 @@ jobs:
           EOL
       - name: dbt compile (validation)
         run: |
-          cd banking_dbt
+          cd dbt_for_banking
           dbt deps
           dbt compile 
