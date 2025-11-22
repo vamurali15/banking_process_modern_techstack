@@ -1,6 +1,7 @@
 from airflow import DAG
 from airflow.operators.bash import BashOperator
-from datetime import datetime
+# ... (default_args definition)
+
 with DAG(
     dag_id="SCD2_snapshots_banking",
     # ... (DAG metadata)
