@@ -24,12 +24,13 @@ jobs:
           python-version: "3.11"
 
       # ------------------------
-      # Install dbt
+      # Install dbt Snowflake adapter
       # ------------------------
       - name: Install dbt Snowflake adapter
         run: |
           python -m pip install --upgrade pip
           pip install dbt-snowflake
+
       # ------------------------
       # Configure dbt profile
       # ------------------------
@@ -38,7 +39,7 @@ jobs:
           mkdir -p ~/.dbt
           cat > ~/.dbt/profiles.yml <<EOL
           banking_dbt:
-            target: prod
+            target: dev
             outputs:
               prod:
                 type: snowflake
@@ -50,12 +51,13 @@ jobs:
                 warehouse: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
                 schema: ANALYTICS
           EOL
+
       # ------------------------
       # Deploy dbt project
       # ------------------------
       - name: dbt run + test (prod)
         run: |
-          cd banking_dbt
+          cd dbt_for_banking
           dbt deps
-          dbt run    # builds production models on Snowflake
-          dbt test   # validates production data
+          dbt run   # builds production models on Snowflake
+          dbt test  # validates production data
