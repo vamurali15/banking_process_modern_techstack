@@ -1,13 +1,13 @@
 from airflow import DAG
 from airflow.operators.bash import BashOperator
-from datetime import datetime
+import datetime as dt
 
 # ... (default_args definition)
 
 with DAG(
     dag_id="SCD2_snapshots_banking",
     # ... (DAG metadata)
-    start_date=datetime(2025, 9, 1),
+    start_date=dt.datetime(2025, 9, 1),
     catchup=False,
     tags=["dbt", "snapshots"],
 ) as dag:
