@@ -33,16 +33,15 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install dependencies
+      - name: Install dependencies and upgrade ruff
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install dbt-snowflake psycopg2-binary pytest ruff
+          pip install dbt-snowflake psycopg2-binary pytest
+          pip install --upgrade ruff
 
       - name: Run linters
-        run: |
-          ruff cache clear
-          ruff check ./docker/dags/
+        run: ruff check ./docker/dags/
 
       - name: Prepare database schema
         env:
@@ -51,17 +50,14 @@ jobs:
           PGHOST: localhost
           PGDATABASE: banking
         run: |
-          # Wait for Postgres to be ready
           until pg_isready -h localhost -p 5432; do
             echo "Waiting for Postgres..."
             sleep 5
           done
-          # Create accounts table
           psql -c "CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY, balance INTEGER);"
 
       - name: Run unit and integration tests
-        run: |
-          pytest tests/
+        run: pytest tests/
 
       - name: Setup dbt profile
         run: |
