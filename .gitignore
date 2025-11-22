@@ -1,5 +1,7 @@
 # GitHub Actions cache
 /.github/.cache
+bank_venv/
+
 
 # Docker cache
 docker/logs/

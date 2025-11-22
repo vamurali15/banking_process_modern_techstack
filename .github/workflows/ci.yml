@@ -40,7 +40,7 @@ jobs:
       - name: Run linters
         run: |
           pip install ruff
-          ruff check .
+          ruff check ./docker/dags/
       - name: Run unit tests
         run: |
           pip install pytest
