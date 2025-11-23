@@ -59,6 +59,7 @@ jobs:
         run: |
           cd dbt_for_banking
           dbt deps
+          dbt run --select staging
           dbt snapshot
-          dbt run   # builds production models on Snowflake
+          dbt run --select marts    # builds production models on Snowflake
           dbt test  # validates production data
