@@ -2,7 +2,7 @@ version: 2
 
 models:
   # -------------------------------------------------------------------------
-  # STAGING MODEL: stg_accounts (Source for current, latest account data)
+  # STAGING MODEL: stg_accounts (The latest version of each account)
   # -------------------------------------------------------------------------
   - name: stg_accounts
     description: Deduplicated, latest account record from the raw accounts data source.
@@ -14,25 +14,25 @@ models:
           - not_null
       
       - name: customer_id
-        description: Foreign key link to the customer dimension (if you have one).
+        description: Foreign key link to the customer dimension.
         tests:
           - not_null
           
       - name: account_type
         description: Type of account (e.g., 'checking', 'savings').
         tests:
+          # FIX: dbt CORE Test - Arguments passed directly (NO 'args' key)
           - accepted_values:
-              args:
-                values: ['checking', 'savings', 'loan']
+              values: ['checking', 'savings', 'loan']
                 
       - name: balance
         description: Current account balance.
         tests:
-          # FIX: Using dbt_expectations tests with the required 'args' key
+          # dbt_expectations Test - Arguments MUST be under 'args' key
           - dbt_expectations.expect_column_values_to_be_of_type:
               args:
                 column_type: NUMERIC
-          # Allow some negative balance/overdraft, but enforce a reasonable lower bound
+          # dbt_expectations Test - Arguments MUST be under 'args' key
           - dbt_expectations.expect_column_min_to_be_greater_than:
               args:
                 min_value: -5000 
@@ -58,21 +58,20 @@ models:
         description: Foreign key to the account table.
         tests:
           - not_null
-          # Enforce Referential Integrity: All transaction accounts must exist in stg_accounts
+          # dbt CORE Test - Relationships must use direct parameters (NO 'args' key)
           - relationships:
-              args:
-                to: ref('stg_accounts')
-                field: account_id
+              to: ref('stg_accounts')
+              field: account_id
                 
       - name: customer_id
         description: Customer ID derived from joining the account staging table.
         tests:
-          - not_null # Should always be present due to the JOIN on stg_accounts
+          - not_null 
           
       - name: amount
         description: Transaction amount.
         tests:
-          # Ensure amounts are within a plausible range for a single transaction
+          # dbt_expectations Test - Arguments MUST be under 'args' key
           - dbt_expectations.expect_column_min_to_be_greater_than:
               args:
                 min_value: -100000 
