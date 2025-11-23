@@ -82,6 +82,7 @@ jobs:
       - name: dbt run and test (real-time)
         run: |
           cd dbt_for_banking
+          dbt run --select staging
           dbt snapshot
-          dbt run
+          dbt run --select marts
           dbt test
