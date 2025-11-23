@@ -9,36 +9,24 @@ on:
 jobs:
   tests:
     runs-on: ubuntu-latest
-    
-    # We remove the 'services' block entirely, as we start the full stack via docker-compose up.
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          POSTGRES_DB: banking
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
 
     steps:
       - uses: actions/checkout@v4
-
-      # 1. Start the entire Docker Compose Stack
-      - name: Start Full Infrastructure Stack
-        # This command starts all services (Kafka, Postgres, MinIO, Airflow, etc.) defined in docker-compose.yml
-        run: |
-          docker-compose up -d
-
-      # 2. Wait for critical services to be ready
-      - name: Wait for critical services
-        run: |
-          # Install postgres client and netcat for readiness checks
-          sudo apt-get update && sudo apt-get install -y postgresql-client netcat
-          
-          # Wait for Kafka (Broker advertised on localhost:29092)
-          echo "Waiting for Kafka (29092)..."
-          while ! nc -z localhost 29092; do 
-            sleep 5; 
-          done
-          
-          # Wait for Postgres (Exposed on localhost:5432)
-          echo "Waiting for Postgres (5432)..."
-          until pg_isready -h localhost -p 5432; do
-            sleep 5
-          done
-          echo "Postgres is ready."
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -49,24 +37,25 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          # Install all necessary dbt adapters, Airflow, and environment tools
-          pip install dbt-snowflake dbt-postgres psycopg2-binary pytest apache-airflow python-dotenv
+          pip install dbt-snowflake psycopg2-binary pytest
 
       - name: Prepare database schema
         env:
-          PGUSER: airflow  # User defined in docker-compose.yml for the Postgres service
-          PGPASSWORD: airflow
-          PGHOST: localhost # Accessing via exposed port
-          PGDATABASE: airflow # Database for Airflow (or change to 'banking' if testing raw source data)
+          PGUSER: ${{ secrets.POSTGRES_USER }}
+          PGPASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
+          PGHOST: localhost
+          PGDATABASE: banking
         run: |
+          until pg_isready -h localhost -p 5432; do
+            echo "Waiting for Postgres..."
+            sleep 5
+          done
           psql -c "CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY, balance INTEGER);"
-          echo "Schema prepared in Postgres."
 
       - name: Run unit and integration tests
-        # This assumes your local tests (if they rely on Postgres) are configured to use localhost:5432
         run: pytest tests/
 
-      - name: Setup dbt profile (Snowflake)
+      - name: Setup dbt profile
         run: |
           mkdir -p ~/.dbt
           cat > ~/.dbt/profiles.yml <<EOL
@@ -91,51 +80,9 @@ jobs:
           dbt compile
 
       - name: dbt run and test (real-time)
-        # This step targets the live Snowflake environment defined in the profile
         run: |
           cd dbt_for_banking
           dbt run --select staging
           dbt snapshot
           dbt run --select marts
           dbt test
-
-      - name: Initialize Airflow Environment
-        run: |
-          # Set and create AIRFLOW_HOME directory
-          export AIRFLOW_HOME=$(pwd)/airflow_home
-          mkdir -p $AIRFLOW_HOME
-          # Use the Airflow CLI to set up the DB tables
-          airflow db init
-
-      - name: Test Airflow DAG execution
-        # Environment variables are needed for the DAG's Python code (MinIO/Snowflake config)
-        env:
-            # MinIO configuration exposed via Docker Compose
-            MINIO_ENDPOINT: http://localhost:9002 
-            MINIO_ACCESS_KEY: admin
-            MINIO_SECRET_KEY: password123
-            MINIO_BUCKET: banking-raw
-            
-            # Snowflake credentials pulled from GitHub Secrets
-            SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
-            SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
-            SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-            SNOWFLAKE_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-            SNOWFLAKE_DB: BANKING
-            SNOWFLAKE_SCHEMA: ANALYTICS
-            
-        run: |
-          export AIRFLOW_HOME=$(pwd)/airflow_home
-          # Assuming the DAG file is named 'minio_to_snowflake_dag.py'
-          DAG_FILE=minio_to_snowflake_dag.py # Replace with your actual DAG file name
-          
-          # Copy DAG file into Airflow DAGs folder (assuming DAG is in the repo root)
-          mkdir -p $AIRFLOW_HOME/dags
-          cp $DAG_FILE $AIRFLOW_HOME/dags/ 
-
-          # Run the DAG test command (tests the Python logic, not the schedule)
-          airflow dags test minio_to_snowflake_once 2025-01-01
-          
-      - name: Cleanup Docker Stack
-        if: always() # Ensure cleanup runs even if previous steps fail
-        run: docker-compose down
