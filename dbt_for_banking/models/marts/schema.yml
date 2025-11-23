@@ -1,84 +1,98 @@
 version: 2
 
+# =====================================================================
+#                           MODEL: STG_ACCOUNTS
+# =====================================================================
 models:
-  # -------------------------------------------------------------------------
-  # STAGING MODEL: stg_accounts (The latest version of each account)
-  # -------------------------------------------------------------------------
   - name: stg_accounts
-    description: Deduplicated, latest account record from the raw accounts data source.
+    description: >
+      Staging model for accounts data. This model deduplicates account
+      records and selects the latest snapshot of each account.
+    config:
+      tags: ['staging']
+      meta:
+        owner: 'data-engineering'
+        layer: 'staging'
+
     columns:
       - name: account_id
         description: Primary key for the account.
         tests:
           - unique
           - not_null
-      
+
       - name: customer_id
-        description: Foreign key link to the customer dimension.
+        description: Foreign key reference to the customers table.
         tests:
           - not_null
-          
+
       - name: account_type
-        description: Type of account (e.g., 'checking', 'savings').
+        description: Type of account (checking, savings, or loan).
         tests:
-          # dbt CORE Test - Arguments passed directly
           - accepted_values:
               values: ['checking', 'savings', 'loan']
-                
+
       - name: balance
-        description: Current account balance.
+        description: Current account balance of the user.
         tests:
-          # FIX: dbt_expectations Test - Arguments passed directly (NO 'args' key)
           - dbt_expectations.expect_column_values_to_be_of_type:
               column_type: NUMERIC
-          
-          # FIX: dbt_expectations Test - Arguments passed directly (NO 'args' key)
           - dbt_expectations.expect_column_min_to_be_greater_than:
-              min_value: -5000 
-                
+              min_value: -5000
+
       - name: created_at
-        description: Timestamp when the account was initially created.
+        description: Timestamp when the account was created.
         tests:
           - not_null
-          
-  # -------------------------------------------------------------------------
-  # FACT MODEL: fct_transactions (Incremental Transactional Data)
-  # -------------------------------------------------------------------------
+
+  # =====================================================================
+  #                       MODEL: FCT_TRANSACTIONS
+  # =====================================================================
   - name: fct_transactions
-    description: Consolidated and joined transaction facts (incremental merge).
+    description: >
+      Fact model containing consolidated transaction data. This model
+      runs incrementally and merges new and updated transactions.
+    config:
+      tags: ['fact', 'finance']
+      meta:
+        owner: 'data-engineering'
+        layer: 'mart'
+        grain: 'transaction_id'
+
     columns:
       - name: transaction_id
         description: Primary key for the transaction.
         tests:
           - unique
           - not_null
-          
+
       - name: account_id
-        description: Foreign key to the account table.
+        description: Foreign key to the staging accounts model.
         tests:
           - not_null
-          # dbt CORE Test - Relationships must use direct parameters
           - relationships:
               to: ref('stg_accounts')
               field: account_id
-                
+
       - name: customer_id
-        description: Customer ID derived from joining the account staging table.
-        tests:
-          - not_null 
-          
-      - name: amount
-        description: Transaction amount.
-        tests:
-          # FIX: dbt_expectations Test - Arguments passed directly (NO 'args' key)
-          - dbt_expectations.expect_column_min_to_be_greater_than:
-              min_value: -100000 
-          
-          # FIX: dbt_expectations Test - Arguments passed directly (NO 'args' key)
-          - dbt_expectations.expect_column_max_to_be_less_than:
-              max_value: 100000
-                
-      - name: transaction_time
-        description: The time the transaction occurred.
+        description: Derived customer ID from the account dimension.
         tests:
           - not_null
+
+      - name: amount
+        description: Amount involved in the transaction.
+        tests:
+          - dbt_expectations.expect_column_min_to_be_greater_than:
+              min_value: -100000
+          - dbt_expectations.expect_column_max_to_be_less_than:
+              max_value: 100000
+
+      - name: transaction_time
+        description: Timestamp when the transaction occurred.
+        tests:
+          - not_null
+
+      # OPTIONAL but recommended for facts
+      - name: created_at
+        description: Timestamp when the record was loaded into the fact table.
+        tests: []
