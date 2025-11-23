@@ -1,0 +1,50 @@
+version: 2
+
+models:
+  # Testing the staging model for accounts (stg_accounts)
+  - name: stg_accounts
+    description: Deduplicated, latest account record from raw data.
+    columns:
+      - name: account_id
+        description: Primary key for the account.
+        tests:
+          - unique
+          - not_null
+      - name: customer_id
+        description: Foreign key link to the customer table.
+        tests:
+          - not_null
+      - name: balance
+        description: Current account balance.
+        tests:
+          # Check if the balance is a plausible, non-negative value
+          - dbt_expectations.expect_column_values_to_be_of_type:
+              column_type: NUMERIC
+          - dbt_expectations.expect_column_min_to_be_greater_than:
+              min_value: -5000 # Allow some negative balance/overdraft, but not extreme
+
+  # Testing the final incremental transactional mart (fct_transactions)
+  - name: fct_transactions
+    description: Consolidated and joined transaction facts.
+    columns:
+      - name: transaction_id
+        description: Primary key for the transaction.
+        tests:
+          - unique
+          - not_null
+      - name: account_id
+        description: Account associated with the transaction.
+        tests:
+          - not_null
+          # Enforce Referential Integrity: Check if every transaction has a corresponding account
+          - relationships:
+              to: ref('stg_accounts')
+              field: account_id
+      - name: amount
+        description: Transaction amount.
+        tests:
+          # A transaction amount should typically be greater than zero, or less than zero for debits
+          - dbt_expectations.expect_column_min_to_be_greater_than:
+              min_value: -10000000 
+          - dbt_expectations.expect_column_max_to_be_less_than:
+              max_value: 10000000
