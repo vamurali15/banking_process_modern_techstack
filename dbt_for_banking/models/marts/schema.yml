@@ -1,13 +1,14 @@
 version: 2
 
-# =====================================================================
-#                           MODEL: STG_ACCOUNTS
-# =====================================================================
 models:
+
+  # =====================================================================
+  #                           STAGING MODEL: stg_accounts
+  # =====================================================================
   - name: stg_accounts
     description: >
-      Staging model for accounts data. This model deduplicates account
-      records and selects the latest snapshot of each account.
+      Staging model containing the latest version of each account after
+      deduplication. Serves as the source of truth for account attributes.
     config:
       tags: ['staging']
       meta:
@@ -22,7 +23,7 @@ models:
           - not_null
 
       - name: customer_id
-        description: Foreign key reference to the customers table.
+        description: Foreign key referring to the customer entity.
         tests:
           - not_null
 
@@ -33,25 +34,30 @@ models:
               values: ['checking', 'savings', 'loan']
 
       - name: balance
-        description: Current account balance of the user.
+        description: Current balance associated with the account.
         tests:
+          # Type validation
           - dbt_expectations.expect_column_values_to_be_of_type:
               column_type: NUMERIC
-          - dbt_expectations.expect_column_min_to_be_greater_than:
+
+          # Balance cannot be less than -5000
+          - dbt_expectations.expect_column_values_to_be_between:
               min_value: -5000
+              strictly: false
 
       - name: created_at
         description: Timestamp when the account was created.
         tests:
           - not_null
 
+
   # =====================================================================
-  #                       MODEL: FCT_TRANSACTIONS
+  #                           FACT MODEL: fct_transactions
   # =====================================================================
   - name: fct_transactions
     description: >
-      Fact model containing consolidated transaction data. This model
-      runs incrementally and merges new and updated transactions.
+      Fact table containing all financial transactions for accounts.
+      This is an incremental model supporting MERGE logic on transaction_id.
     config:
       tags: ['fact', 'finance']
       meta:
@@ -61,13 +67,13 @@ models:
 
     columns:
       - name: transaction_id
-        description: Primary key for the transaction.
+        description: Primary key for the transaction record.
         tests:
           - unique
           - not_null
 
       - name: account_id
-        description: Foreign key to the staging accounts model.
+        description: Account related to the transaction.
         tests:
           - not_null
           - relationships:
@@ -75,24 +81,23 @@ models:
               field: account_id
 
       - name: customer_id
-        description: Derived customer ID from the account dimension.
+        description: The customer owning the related account.
         tests:
           - not_null
 
       - name: amount
-        description: Amount involved in the transaction.
+        description: Amount of the transaction.
         tests:
-          - dbt_expectations.expect_column_min_to_be_greater_than:
+          - dbt_expectations.expect_column_values_to_be_between:
               min_value: -100000
-          - dbt_expectations.expect_column_max_to_be_less_than:
               max_value: 100000
+              strictly: false
 
       - name: transaction_time
         description: Timestamp when the transaction occurred.
         tests:
           - not_null
 
-      # OPTIONAL but recommended for facts
       - name: created_at
-        description: Timestamp when the record was loaded into the fact table.
+        description: Timestamp when this transaction was processed and loaded.
         tests: []
