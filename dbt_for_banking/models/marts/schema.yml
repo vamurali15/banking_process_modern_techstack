@@ -21,21 +21,20 @@ models:
       - name: account_type
         description: Type of account (e.g., 'checking', 'savings').
         tests:
-          # FIX: dbt CORE Test - Arguments passed directly (NO 'args' key)
+          # dbt CORE Test - Arguments passed directly
           - accepted_values:
               values: ['checking', 'savings', 'loan']
                 
       - name: balance
         description: Current account balance.
         tests:
-          # dbt_expectations Test - Arguments MUST be under 'args' key
+          # FIX: dbt_expectations Test - Arguments passed directly (NO 'args' key)
           - dbt_expectations.expect_column_values_to_be_of_type:
-              args:
-                column_type: NUMERIC
-          # dbt_expectations Test - Arguments MUST be under 'args' key
+              column_type: NUMERIC
+          
+          # FIX: dbt_expectations Test - Arguments passed directly (NO 'args' key)
           - dbt_expectations.expect_column_min_to_be_greater_than:
-              args:
-                min_value: -5000 
+              min_value: -5000 
                 
       - name: created_at
         description: Timestamp when the account was initially created.
@@ -58,7 +57,7 @@ models:
         description: Foreign key to the account table.
         tests:
           - not_null
-          # dbt CORE Test - Relationships must use direct parameters (NO 'args' key)
+          # dbt CORE Test - Relationships must use direct parameters
           - relationships:
               to: ref('stg_accounts')
               field: account_id
@@ -71,13 +70,13 @@ models:
       - name: amount
         description: Transaction amount.
         tests:
-          # dbt_expectations Test - Arguments MUST be under 'args' key
+          # FIX: dbt_expectations Test - Arguments passed directly (NO 'args' key)
           - dbt_expectations.expect_column_min_to_be_greater_than:
-              args:
-                min_value: -100000 
+              min_value: -100000 
+          
+          # FIX: dbt_expectations Test - Arguments passed directly (NO 'args' key)
           - dbt_expectations.expect_column_max_to_be_less_than:
-              args:
-                max_value: 100000
+              max_value: 100000
                 
       - name: transaction_time
         description: The time the transaction occurred.
