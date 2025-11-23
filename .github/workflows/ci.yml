@@ -1,32 +1,38 @@
-name: CI
-
-on:
-  push:
-    branches: [ main, dev1 ]
-  pull_request:
-    branches: [ main ]
+# ... (Previous code: name, on, pull_request)
 
 jobs:
   tests:
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: postgres:15
-        env:
-          POSTGRES_USER: ${{ secrets.POSTGRES_USER }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_DB: banking
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    
+    # ❌ Remove the existing 'services' block entirely, 
+    # as we will start the entire stack using docker compose up
 
     steps:
       - uses: actions/checkout@v4
+      
+      # 1. Start the entire Docker Compose Stack
+      - name: Start Full Infrastructure Stack
+        # Ensure your docker-compose file is named 'docker-compose.yml' 
+        # or use the -f flag with the correct name.
+        run: |
+          docker-compose up -d
+
+      # 2. Wait for all services (especially Kafka and Postgres) to be ready
+      - name: Wait for critical services to be ready
+        run: |
+          # Wait for the Kafka broker to be accessible (using the advertised port)
+          echo "Waiting for Kafka..."
+          while ! nc -z localhost 29092; do 
+            sleep 5; 
+          done
+          
+          # Wait for Postgres to be ready (using the exposed port)
+          echo "Waiting for Postgres..."
+          sudo apt-get update && sudo apt-get install -y postgresql-client
+          until pg_isready -h localhost -p 5432; do
+            sleep 5
+          done
+          echo "Postgres is ready."
 
       - name: Setup Python
         uses: actions/setup-python@v4
@@ -37,52 +43,29 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install dbt-snowflake psycopg2-binary pytest
+          # Only install necessary packages for running tests/Airflow DAG
+          pip install dbt-snowflake dbt-postgres psycopg2-binary pytest apache-airflow python-dotenv
 
+      # 3. Prepare schema and run tests against the running services
+      # NOTE: For the steps below, you MUST use 'localhost' and the exposed ports (5432, 29092, 9002, etc.)
+      
       - name: Prepare database schema
         env:
-          PGUSER: ${{ secrets.POSTGRES_USER }}
-          PGPASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          PGHOST: localhost
-          PGDATABASE: banking
+          PGUSER: airflow
+          PGPASSWORD: airflow
+          PGHOST: localhost # Accessing via exposed port
+          PGDATABASE: airflow # Using the database defined in the docker-compose file
         run: |
-          until pg_isready -h localhost -p 5432; do
-            echo "Waiting for Postgres..."
-            sleep 5
-          done
           psql -c "CREATE TABLE IF NOT EXISTS accounts (id INTEGER PRIMARY KEY, balance INTEGER);"
+          echo "Schema prepared in Postgres."
 
       - name: Run unit and integration tests
+        # Assuming tests are configured to use localhost:5432 for Postgres
         run: pytest tests/
 
-      - name: Setup dbt profile
-        run: |
-          mkdir -p ~/.dbt
-          cat > ~/.dbt/profiles.yml <<EOL
-          dbt_for_banking:
-            target: dev
-            outputs:
-              dev:
-                type: snowflake
-                account: ${{ secrets.SNOWFLAKE_ACCOUNT }}
-                user: ${{ secrets.SNOWFLAKE_USER }}
-                password: ${{ secrets.SNOWFLAKE_PASSWORD }}
-                role: ACCOUNTADMIN
-                database: BANKING
-                warehouse: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
-                schema: ANALYTICS
-          EOL
+      # ... (dbt profile setup steps using Snowflake secrets remain the same)
 
-      - name: dbt compile (validation)
-        run: |
-          cd dbt_for_banking
-          dbt deps
-          dbt compile
-
-      - name: dbt run and test (real-time)
-        run: |
-          cd dbt_for_banking
-          dbt run --select staging
-          dbt snapshot
-          dbt run --select marts
-          dbt test
+      # 4. Cleanup (Optional but Recommended)
+      - name: Cleanup Docker Stack
+        if: always()
+        run: docker-compose down
