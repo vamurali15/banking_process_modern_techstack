@@ -1,50 +1,86 @@
 version: 2
 
 models:
-  # Testing the staging model for accounts (stg_accounts)
+  # -------------------------------------------------------------------------
+  # STAGING MODEL: stg_accounts (Source for current, latest account data)
+  # -------------------------------------------------------------------------
   - name: stg_accounts
-    description: Deduplicated, latest account record from raw data.
+    description: Deduplicated, latest account record from the raw accounts data source.
     columns:
       - name: account_id
         description: Primary key for the account.
         tests:
           - unique
           - not_null
+      
       - name: customer_id
-        description: Foreign key link to the customer table.
+        description: Foreign key link to the customer dimension (if you have one).
         tests:
           - not_null
+          
+      - name: account_type
+        description: Type of account (e.g., 'checking', 'savings').
+        tests:
+          - accepted_values:
+              args:
+                values: ['checking', 'savings', 'loan']
+                
       - name: balance
         description: Current account balance.
         tests:
-          # Check if the balance is a plausible, non-negative value
+          # FIX: Using dbt_expectations tests with the required 'args' key
           - dbt_expectations.expect_column_values_to_be_of_type:
-              column_type: NUMERIC
+              args:
+                column_type: NUMERIC
+          # Allow some negative balance/overdraft, but enforce a reasonable lower bound
           - dbt_expectations.expect_column_min_to_be_greater_than:
-              min_value: -5000 # Allow some negative balance/overdraft, but not extreme
-
-  # Testing the final incremental transactional mart (fct_transactions)
+              args:
+                min_value: -5000 
+                
+      - name: created_at
+        description: Timestamp when the account was initially created.
+        tests:
+          - not_null
+          
+  # -------------------------------------------------------------------------
+  # FACT MODEL: fct_transactions (Incremental Transactional Data)
+  # -------------------------------------------------------------------------
   - name: fct_transactions
-    description: Consolidated and joined transaction facts.
+    description: Consolidated and joined transaction facts (incremental merge).
     columns:
       - name: transaction_id
         description: Primary key for the transaction.
         tests:
           - unique
           - not_null
+          
       - name: account_id
-        description: Account associated with the transaction.
+        description: Foreign key to the account table.
         tests:
           - not_null
-          # Enforce Referential Integrity: Check if every transaction has a corresponding account
+          # Enforce Referential Integrity: All transaction accounts must exist in stg_accounts
           - relationships:
-              to: ref('stg_accounts')
-              field: account_id
+              args:
+                to: ref('stg_accounts')
+                field: account_id
+                
+      - name: customer_id
+        description: Customer ID derived from joining the account staging table.
+        tests:
+          - not_null # Should always be present due to the JOIN on stg_accounts
+          
       - name: amount
         description: Transaction amount.
         tests:
-          # A transaction amount should typically be greater than zero, or less than zero for debits
+          # Ensure amounts are within a plausible range for a single transaction
           - dbt_expectations.expect_column_min_to_be_greater_than:
-              min_value: -10000000 
+              args:
+                min_value: -100000 
           - dbt_expectations.expect_column_max_to_be_less_than:
-              max_value: 10000000
+              args:
+                max_value: 100000
+                
+      - name: transaction_time
+        description: The time the transaction occurred.
+        tests:
+          - not_null
