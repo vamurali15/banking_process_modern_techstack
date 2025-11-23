@@ -1,0 +1,5 @@
+# dbt_for_banking/packages.yml
+
+packages:
+  - package: calogica/dbt_expectations
+    version: 0.10.0 # Use the latest stable version
