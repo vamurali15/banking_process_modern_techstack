@@ -31,14 +31,14 @@ models:
         description: Type of account (checking, savings, or loan).
         tests:
           - accepted_values:
-              values: ['checking', 'savings', 'loan']
+              values: ['CHECKING', 'SAVINGS']
 
       - name: balance
         description: Current balance associated with the account.
         tests:
           # Type validation
           - dbt_expectations.expect_column_values_to_be_of_type:
-              column_type: NUMERIC
+              column_type: FLOAT
 
           # Balance cannot be less than -5000
           - dbt_expectations.expect_column_values_to_be_between:
