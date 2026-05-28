@@ -1,3 +1,5 @@
+This is the change
+
 docker stop $(docker ps -q)
 
 docker compose exec airflow-scheduler airflow db init
